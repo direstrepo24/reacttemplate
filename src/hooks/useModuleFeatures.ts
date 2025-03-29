@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FeatureFlags } from '@/core/config/featureFlags';
+import { FeatureFlags } from '@/core/types';
 
-type ModuleFeatures = Record<FeatureFlags, boolean>;
+// ModuleFeatures ahora es un objeto que permite cualquier clave
+export interface ModuleFeatures {
+  [key: string]: boolean;
+  neumorphism: boolean;  // Propiedad específica para mantener compatibilidad
+}
 
 // Configuración inicial de feature flags
 const defaultFeatures: ModuleFeatures = {
-  [FeatureFlags.USE_NEUMORPHISM]: true,
   [FeatureFlags.ENABLE_DARK_MODE]: true,
+  [FeatureFlags.NEUMORPHISM]: true,
   [FeatureFlags.NOTIFICATIONS]: true,
   [FeatureFlags.ADVANCED_SECURITY]: false,
   [FeatureFlags.USER_PROFILES]: true,
@@ -20,6 +24,7 @@ const defaultFeatures: ModuleFeatures = {
   [FeatureFlags.ADMIN_MODULE]: true,
   [FeatureFlags.REPORTS_MODULE]: false,
   [FeatureFlags.INVESTMENT_ORDER]: true,
+  neumorphism: true,  // Propiedad específica para mantener compatibilidad
 };
 
 const STORAGE_KEY = 'feature_flags';
@@ -30,32 +35,40 @@ export const useModuleFeatures = () => {
     const storedFeatures = localStorage.getItem(STORAGE_KEY);
     
     if (storedFeatures) {
-      const parsedFeatures = JSON.parse(storedFeatures);
-      
-      // Verificar si hay nuevos feature flags que no estén en localStorage
-      const updatedFeatures = { ...defaultFeatures };
-      let hasNewFlags = false;
-      
-      // Mantener los valores existentes
-      Object.keys(parsedFeatures).forEach(key => {
-        if (key in defaultFeatures) {
-          updatedFeatures[key as FeatureFlags] = parsedFeatures[key];
+      try {
+        const parsedFeatures = JSON.parse(storedFeatures);
+        
+        // Verificar si hay nuevos feature flags que no estén en localStorage
+        const updatedFeatures = { ...defaultFeatures };
+        let hasNewFlags = false;
+        
+        // Mantener los valores existentes
+        Object.keys(parsedFeatures).forEach(key => {
+          if (key in defaultFeatures) {
+            updatedFeatures[key] = parsedFeatures[key];
+          }
+        });
+        
+        // Verificar si hay flags nuevos que no estaban en localStorage
+        Object.keys(defaultFeatures).forEach(key => {
+          if (!(key in parsedFeatures)) {
+            hasNewFlags = true;
+          }
+        });
+        
+        // Si hay nuevos flags, guardar la versión actualizada
+        if (hasNewFlags) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedFeatures));
         }
-      });
-      
-      // Verificar si hay flags nuevos que no estaban en localStorage
-      Object.keys(defaultFeatures).forEach(key => {
-        if (!(key in parsedFeatures)) {
-          hasNewFlags = true;
-        }
-      });
-      
-      // Si hay nuevos flags, guardar la versión actualizada
-      if (hasNewFlags) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedFeatures));
+        
+        // Asegurar que neumorphism esté sincronizado con NEUMORPHISM
+        updatedFeatures.neumorphism = updatedFeatures[FeatureFlags.NEUMORPHISM];
+        
+        return updatedFeatures;
+      } catch (e) {
+        console.error('Error parsing stored features', e);
+        return defaultFeatures;
       }
-      
-      return updatedFeatures;
     }
     
     return defaultFeatures;
@@ -65,15 +78,26 @@ export const useModuleFeatures = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(features));
   }, [features]);
 
-  const hasFeature = useCallback((feature: FeatureFlags): boolean => {
+  const hasFeature = useCallback((feature: string): boolean => {
     return features[feature] ?? false;
   }, [features]);
 
-  const setFeature = useCallback((feature: FeatureFlags, enabled: boolean) => {
-    setFeatures(prev => ({
-      ...prev,
-      [feature]: enabled,
-    }));
+  const setFeature = useCallback((feature: string, enabled: boolean) => {
+    setFeatures(prev => {
+      const updated = {
+        ...prev,
+        [feature]: enabled,
+      };
+      
+      // Mantener sincronizado neumorphism con NEUMORPHISM
+      if (feature === FeatureFlags.NEUMORPHISM) {
+        updated.neumorphism = enabled;
+      } else if (feature === 'neumorphism') {
+        updated[FeatureFlags.NEUMORPHISM] = enabled;
+      }
+      
+      return updated;
+    });
   }, []);
 
   return {
@@ -81,4 +105,4 @@ export const useModuleFeatures = () => {
     setFeature,
     features,
   };
-}; 
+};

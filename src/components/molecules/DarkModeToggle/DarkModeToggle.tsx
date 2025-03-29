@@ -1,63 +1,41 @@
-import { useEffect, useState } from 'react';
-import { FiSun, FiMoon } from 'react-icons/fi';
-import { isFeatureEnabled, FeatureFlags } from '@core/config/featureFlags';
-import { cn } from '@core/utils/cn';
+import { useCallback } from 'react';
+import { useTheme } from '@/core/theme/ThemeContext';
+import { MoonIcon, SunIcon } from '@heroicons/react/24/outline';
+import { FeatureFlags } from '@/core/types';
+import { isFeatureEnabled } from '@/core/config/featureFlags';
 
-interface DarkModeToggleProps {
-  className?: string;
-}
-
-export const DarkModeToggle = ({ className }: DarkModeToggleProps) => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const darkModeEnabled = isFeatureEnabled(FeatureFlags.USE_DARK_MODE);
-  const useNeumorphism = isFeatureEnabled(FeatureFlags.USE_NEUMORPHISM);
-
-  // Initialize dark mode from localStorage
-  useEffect(() => {
-    const savedMode = localStorage.getItem('darkMode');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    // Set initial state based on saved preference or system preference
-    if (savedMode !== null) {
-      setIsDarkMode(savedMode === 'true');
-    } else if (prefersDark) {
-      setIsDarkMode(true);
-    }
-  }, []);
-
-  // Update the document when dark mode changes
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    
-    // Save preference to localStorage
-    localStorage.setItem('darkMode', isDarkMode.toString());
-  }, [isDarkMode]);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(prev => !prev);
-  };
-
-  // If feature is disabled, don't render the toggle
+/**
+ * Componente para alternar entre modo claro y oscuro
+ */
+export const DarkModeToggle = () => {
+  // Verificar si el dark mode está habilitado como feature flag
+  const darkModeEnabled = isFeatureEnabled(FeatureFlags.ENABLE_DARK_MODE);
+  const { isDarkMode, toggleDarkMode } = useTheme();
+  
+  const handleToggle = useCallback(() => {
+    toggleDarkMode();
+  }, [toggleDarkMode]);
+  
   if (!darkModeEnabled) {
     return null;
   }
-
+  
   return (
     <button
-      data-testid="dark-mode-toggle"
-      onClick={toggleDarkMode}
-      className={cn(
-        'p-2 rounded-full transition-colors',
-        isDarkMode ? 'bg-gray-700 text-yellow-300' : 'bg-blue-100 text-blue-800',
-        useNeumorphism && 'shadow-neumorph',
-        className
-      )}
+      type="button"
+      onClick={handleToggle}
+      className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white"
+      aria-pressed={isDarkMode}
+      aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
     >
-      {isDarkMode ? <FiSun size={20} /> : <FiMoon size={20} />}
+      <span className="sr-only">
+        {isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+      </span>
+      {isDarkMode ? (
+        <SunIcon className="h-6 w-6" aria-hidden="true" />
+      ) : (
+        <MoonIcon className="h-6 w-6" aria-hidden="true" />
+      )}
     </button>
   );
-}; 
+};

@@ -23,12 +23,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       children,
       fullWidth = false,
       testId,
+      asChild,
       ...props
     },
     ref
   ) => {
     const { features } = useModuleFeatures();
-    const isNeumorph = neumorph ?? features[FeatureFlags.NEUMORPHISM];
+    const isNeumorph = neumorph ?? features.neumorphism;
 
     const baseStyles = 'inline-flex items-center justify-center font-medium rounded transition-all duration-200';
 
@@ -60,9 +61,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       link: isNeumorph
         ? 'btn-neumorph-link'
         : 'text-primary-500 hover:text-primary-600 active:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 dark:active:text-primary-200 underline transition-colors duration-200',
+      neutral: isNeumorph
+        ? 'btn-neumorph-neutral'
+        : 'bg-gray-500 hover:bg-gray-600 active:bg-gray-700 text-white transition-colors duration-200',
     };
 
     const buttonStyles = cn(baseStyles, sizeStyles[size], variantStyles[variant], fullWidth ? 'w-full' : '', className);
+
+    if (asChild) {
+      return React.cloneElement(children as React.ReactElement, {
+        ref,
+        className: buttonStyles,
+        disabled: disabled || isLoading,
+        onClick,
+        'data-testid': testId,
+        ...props
+      });
+    }
 
     return (
       <button
@@ -106,4 +121,4 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }
 );
 
-Button.displayName = 'Button'; 
+Button.displayName = 'Button';

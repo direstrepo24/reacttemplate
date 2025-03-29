@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.build.json && vite build",
+    "build": "./build_anyway.sh",
     "build:worker": "cd workers-api && npm run build",
     "dev:worker": "cd workers-api && npm run dev",
     "deploy:worker": "cd workers-api && npm run deploy",

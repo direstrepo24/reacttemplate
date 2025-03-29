@@ -1,0 +1,34 @@
+import { vi } from 'vitest';
+import { FeatureFlags } from '../types';
+
+// Mock de isFeatureEnabled
+export const isFeatureEnabled = vi.fn().mockImplementation((flag: FeatureFlags) => {
+  return true;
+});
+
+// Mock de getFeatureFlag
+export const getFeatureFlag = vi.fn().mockImplementation((flag: FeatureFlags) => {
+  return {
+    name: flag,
+    enabled: true,
+    description: 'Mock feature flag',
+    group: 'Mock'
+  };
+});
+
+// Mock de findFeatureFlag
+export const findFeatureFlag = vi.fn().mockImplementation((flag: FeatureFlags) => {
+  return {
+    name: flag,
+    enabled: true,
+    description: 'Mock feature flag',
+    group: 'Mock'
+  };
+});
+
+// Mock de checkAuthorization
+export const checkAuthorization = vi.fn().mockImplementation(() => true);
+
+// Exportar las constantes usadas en las pruebas
+export { FeatureFlags };
+export const featureFlags = [];
