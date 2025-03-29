@@ -1,3 +1,7 @@
+# Este archivo está obsoleto para el despliegue de Cloudflare Pages
+# Se está utilizando el sistema de CI/CD de Cloudflare Pages via GitHub Actions
+# Ver: .github/workflows/deploy.yml
+
 name = "reacttemplate"
 main = "dist/index.html"
 compatibility_date = "2023-12-01"
