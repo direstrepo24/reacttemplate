@@ -20,12 +20,22 @@ export class MockPoliticasRepository implements PoliticasRepository {
   }
 
   async create(data: Partial<PoliticasEntity>): Promise<PoliticasEntity> {
+    const now = new Date();
     const item = {
       id: crypto.randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...data
-    };
+      type: 'politicas',
+      orderType: data.orderType || 'BUY',
+      symbol: data.symbol || '',
+      quantity: data.quantity || 0,
+      price: data.price || 0,
+      status: data.status || 'PENDING',
+      createdAt: now,
+      updatedAt: now,
+      executedAt: data.executedAt,
+      userId: data.userId || '',
+      notes: data.notes
+    } as PoliticasEntity;
+    
     this.items.push(item);
     return item;
   }
@@ -52,4 +62,4 @@ export class MockPoliticasRepository implements PoliticasRepository {
       this.items.splice(index, 1);
     }
   }
-} 
+}
