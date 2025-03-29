@@ -2,20 +2,18 @@ name = "reacttemplate-api"
 main = "src/index.ts"
 compatibility_date = "2024-03-29"
 
-[vars]
-# Variables de entorno que quieras definir para tu Worker
-# API_KEY = "..."
-
 # Configuración para desarrollo local
 [dev]
 port = 8787
 local_protocol = "http"
 
-# Configuración para producción
-routes = [
-  { pattern = "api.reacttemplate.pages.dev", zone_name = "pages.dev" }
-]
+# Configuración de rutas
+# Para un worker asociado a Pages, se usa custom_domain
+# https://developers.cloudflare.com/workers/wrangler/configuration/#keys
+[[routes]]
+pattern = "api.reacttemplate.pages.dev/*"
+zone_name = "pages.dev"
 
-# Configuración para compilación - TypeScript
+# Configuración para compilación - TypeScript está gestionado por Workers
 [build]
 command = "npm run build" 

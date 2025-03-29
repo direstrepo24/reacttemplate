@@ -22,7 +22,7 @@
     "e2e": "start-server-and-test dev http://localhost:3000 cypress:open",
     "e2e:headless": "start-server-and-test dev http://localhost:3000 cypress:run",
     "generate": "plop",
-    "deploy": "wrangler pages publish dist --project-name=reacttemplate"
+    "deploy": "wrangler pages deploy dist --project-name=reacttemplate"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.18",

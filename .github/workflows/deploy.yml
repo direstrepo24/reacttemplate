@@ -21,10 +21,10 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: npm install
         
       - name: Install Worker dependencies
-        run: cd workers-api && npm ci
+        run: cd workers-api && npm install
       
       - name: Build project
         run: npm run build
@@ -49,4 +49,4 @@ jobs:
           workingDirectory: 'workers-api'
           command: deploy
         env:
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }} 
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }} 
