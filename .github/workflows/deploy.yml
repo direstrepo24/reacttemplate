@@ -40,6 +40,8 @@ jobs:
           projectName: reacttemplate
           directory: dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          wranglerVersion: 3
+          createIfMissing: true
           
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
