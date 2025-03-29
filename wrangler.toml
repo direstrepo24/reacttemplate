@@ -1,0 +1,19 @@
+name = "reacttemplate"
+main = "dist/index.html"
+compatibility_date = "2023-12-01"
+
+[site]
+bucket = "./dist"
+entry-point = "."
+
+[build]
+command = "npm run build"
+watch_dir = "src"
+
+[env.production]
+workers_dev = false
+route = ""  # Dejar vacío ya que se usará Cloudflare Pages
+
+[env.staging]
+name = "reacttemplate-staging"
+workers_dev = true 

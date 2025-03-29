@@ -1,0 +1,22 @@
+name = "reacttemplate-api"
+main = "src/index.ts"
+compatibility_date = "2023-12-01"
+
+[vars]
+# Variables de entorno que quieras definir para tu Worker
+# API_KEY = "..."
+
+# Configuración para desarrollo local
+[dev]
+port = 8787
+local_protocol = "http"
+
+# Configuración para producción
+[env.production]
+routes = [
+  { pattern = "api.reacttemplate.pages.dev/*", zone_name = "pages.dev" }
+]
+
+# Configuración para compilación
+[build]
+command = "npm run build:worker" 
