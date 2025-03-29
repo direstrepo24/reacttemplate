@@ -1,0 +1,84 @@
+import { useEffect, useState } from 'react';
+import { ButtonBuilder } from '@/components/atoms/Button/ButtonBuilder';
+import { Button } from '@/components/atoms/Button/Button';
+import { isFeatureEnabled, FeatureFlags, subscribeToFeatureFlags } from '@/core/config/featureFlags';
+import { cn } from '@/core/utils/cn';
+import { useAuthStore } from '@/features/auth/application/authStore';
+
+/**
+ * Submódulo {{pascalCase name}} para el módulo {{pascalCase parentModule}}
+ * {{description}}
+ */
+export const {{pascalCase name}} = () => {
+  const { user } = useAuthStore();
+  
+  // Hook para feature flag con reactividad
+  const [useNeumorphism, setUseNeumorphism] = useState(isFeatureEnabled(FeatureFlags.USE_NEUMORPHISM));
+  const featureFlagName = FeatureFlags.{{constantCase parentModule}}_{{constantCase name}};
+  const [isFeatureEnabled, setIsFeatureEnabled] = useState(isFeatureEnabled(featureFlagName));
+
+  // Suscribirse a cambios en feature flags
+  useEffect(() => {
+    // Función para actualizar estado basado en feature flags
+    const updateFeatureFlags = () => {
+      setUseNeumorphism(isFeatureEnabled(FeatureFlags.USE_NEUMORPHISM));
+      setIsFeatureEnabled(isFeatureEnabled(featureFlagName));
+    };
+    
+    // Suscribirse a cambios
+    const unsubscribe = subscribeToFeatureFlags(() => {
+      updateFeatureFlags();
+    });
+    
+    // Ejecutar inmediatamente
+    updateFeatureFlags();
+    
+    // Limpieza al desmontar
+    return () => {
+      unsubscribe();
+    };
+  }, [featureFlagName]);
+
+  // Builder para el botón de acción
+  const actionButton = new ButtonBuilder()
+    .setVariant('primary')
+    .setSize('md')
+    .setChildren('Acción {{pascalCase name}}')
+    .setOnClick((e) => { console.log('Acción ejecutada'); })
+    .setNeumorph(useNeumorphism)
+    .build();
+
+  if (!isFeatureEnabled) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-gray-500">Esta funcionalidad no está habilitada actualmente.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <div className={cn(
+        'flex justify-between items-center mb-6 p-4 bg-white rounded-lg',
+        useNeumorphism && 'shadow-neumorph'
+      )}>
+        <h1 className="text-2xl font-bold">{{pascalCase name}}</h1>
+        <Button {...actionButton} />
+      </div>
+
+      <div className={cn(
+        'p-4 bg-white rounded-lg',
+        useNeumorphism && 'shadow-neumorph'
+      )}>
+        <p className="mb-4">
+          {{description}}
+        </p>
+        
+        <p>
+          Este es un submódulo del módulo principal {{pascalCase parentModule}}.
+          Puedes personalizar este componente según tus necesidades específicas.
+        </p>
+      </div>
+    </div>
+  );
+}; 

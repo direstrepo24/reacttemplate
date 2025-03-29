@@ -1,0 +1,79 @@
+import { useState, useCallback } from 'react';
+import { {{pascalCase name}}Entity } from '../../domain/entities/{{pascalCase name}}Entity';
+import { {{pascalCase name}}Repository, Mock{{pascalCase name}}Repository } from '../../domain/repositories/{{pascalCase name}}Repository';
+
+// In a real app, this would be injected
+const repository: {{pascalCase name}}Repository = new Mock{{pascalCase name}}Repository();
+
+export const use{{pascalCase name}} = () => {
+  const [items, setItems] = useState<{{pascalCase name}}Entity[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchItems = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await repository.getAll();
+      setItems(data);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const createItem = useCallback(async (data: Partial<{{pascalCase name}}Entity>) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const newItem = await repository.create(data);
+      setItems(current => [...current, newItem]);
+      return newItem;
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const updateItem = useCallback(async (id: string, data: Partial<{{pascalCase name}}Entity>) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const updated = await repository.update(id, data);
+      setItems(current => current.map(item => item.id === id ? updated : item));
+      return updated;
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const deleteItem = useCallback(async (id: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await repository.delete(id);
+      setItems(current => current.filter(item => item.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'));
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return {
+    items,
+    loading,
+    error,
+    fetchItems,
+    createItem,
+    updateItem,
+    deleteItem
+  };
+}; 
