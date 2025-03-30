@@ -7,12 +7,10 @@ compatibility_date = "2024-03-29"
 port = 8787
 local_protocol = "http"
 
-# Configuración de rutas
-# Para un worker asociado a Pages, se usa custom_domain
-# https://developers.cloudflare.com/workers/wrangler/configuration/#keys
-[[routes]]
-pattern = "api.reacttemplate.pages.dev/*"
-zone_name = "pages.dev"
+# Configuración de dominio personalizado
+# Para workers asociados a Pages, es mejor usar custom_domain
+# https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
+custom_domain = "api.reacttemplate.pages.dev"
 
 # Configuración para compilación - TypeScript está gestionado por Workers
 [build]

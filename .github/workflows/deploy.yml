@@ -32,10 +32,20 @@ jobs:
       - name: Build Worker
         run: npm run build:worker
       
-      - name: Create Cloudflare Pages project if not exists
+      - name: Check if Cloudflare Pages project exists
+        id: check_project
         run: |
-          # Intentar crear el proyecto (si ya existe, fallará pero no detendrá el workflow)
-          npx wrangler pages project create reacttemplate --production-branch=main || true
+          # Intentar obtener info del proyecto para ver si existe
+          PROJECT_EXISTS=$(npx wrangler pages project list | grep -c "reacttemplate" || echo "0")
+          echo "project_exists=$PROJECT_EXISTS" >> $GITHUB_OUTPUT
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      
+      - name: Create Cloudflare Pages project if needed
+        if: steps.check_project.outputs.project_exists == '0'
+        run: |
+          npx wrangler pages project create reacttemplate --production-branch=main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
@@ -46,12 +56,15 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           
+      - name: Update Wrangler to latest version
+        run: |
+          cd workers-api
+          npm install wrangler@latest
+      
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          workingDirectory: 'workers-api'
-          command: deploy
+        run: |
+          cd workers-api
+          npx wrangler deploy
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }} 
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }} 
