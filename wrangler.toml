@@ -3,8 +3,10 @@
 # Ver: .github/workflows/deploy.yml
 
 name = "reacttemplate"
-main = "dist/index.html"
-compatibility_date = "2023-12-01"
+compatibility_date = "2024-03-29"
+
+# Configuración de Pages
+pages_build_output_dir = "dist"
 
 [site]
 bucket = "./dist"
