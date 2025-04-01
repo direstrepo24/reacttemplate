@@ -720,3 +720,558 @@ El proyecto sigue la metodología de Trunk Based Development, por lo que se reco
 - Realizar cambios pequeños y frecuentes
 - Utilizar feature flags para controlar funcionalidades en desarrollo
 - Asegurar que cada commit a `main` mantenga el código en estado deployable
+
+## Arquitectura de Seguridad
+
+La implementación de seguridad en la aplicación sigue la filosofía de diseño del resto del proyecto: modular, basada en interfaces abstraídas, y siguiendo patrones funcionales.
+
+### 1. Autenticación y Autorización
+
+#### 1.1 Integración con Cloudflare Access (Zero Trust)
+
+La primera capa de seguridad utiliza Cloudflare Access para implementar un modelo Zero Trust:
+
+```
+┌────────────────┐     ┌──────────────────┐     ┌─────────────┐
+│   Usuario      │────▶│  Cloudflare      │────▶│  Aplicación │
+│                │     │  Access + JWT    │     │             │
+└────────────────┘     └──────────────────┘     └─────────────┘
+```
+
+1. **Configuración de Cloudflare Access**:
+   - Crear aplicación en el panel Zero Trust de Cloudflare
+   - Configurar dominios: `reacttemplate.pages.dev` y `api.reacttemplate.pages.dev`
+   - Definir políticas basadas en:
+     - Dirección de correo
+     - Dominios de correo permitidos
+     - Factores de autenticación adicionales
+
+2. **Verificación de JWT en Workers**:
+   ```typescript
+   // workers-api/src/middleware/authMiddleware.ts
+   
+   export async function verifyAuth(request: Request, env: Env) {
+     const token = request.headers.get('CF-Access-JWT-Assertion');
+     
+     if (!token) {
+       return new Response(JSON.stringify({
+         success: false,
+         error: 'No autorizado'
+       }), {
+         status: 401,
+         headers: {
+           'Content-Type': 'application/json',
+           ...corsHeaders
+         }
+       });
+     }
+     
+     try {
+       // Verificar con clave pública de Cloudflare Access
+       const payload = await verifyCloudflareToken(token, env.CF_TEAM_DOMAIN);
+       
+       // Adjuntar usuario al request
+       request.user = extractUserFromPayload(payload);
+       
+       return null; // Continuar con la request
+     } catch (error) {
+       return new Response(JSON.stringify({
+         success: false,
+         error: 'Token inválido'
+       }), {
+         status: 403,
+         headers: {
+           'Content-Type': 'application/json',
+           ...corsHeaders
+         }
+       });
+     }
+   }
+   ```
+
+#### 1.2 Sistema de Roles y Permisos
+
+Implementación siguiendo la arquitectura por features y principios funcionales:
+
+```
+src/features/auth/
+  ├── domain/                   # Lógica de dominio para autenticación
+  │   ├── entities/            
+  │   │   └── User.ts           # Define el modelo de usuario con roles
+  │   ├── repositories/        
+  │   │   └── AuthRepository.ts # Interfaz para auth
+  │   └── value-objects/       
+  │       └── Permission.ts     # Value objects para permisos
+  ├── application/             
+  │   ├── hooks/               
+  │   │   ├── useAuth.ts        # Hook principal de autenticación
+  │   │   └── usePermissions.ts # Verificación de permisos
+  │   └── services/            
+  │       └── TokenService.ts   # Manejo de tokens JWT
+  └── presentation/            
+      ├── components/          
+      │   └── ProtectedRoute.tsx # Componente para rutas protegidas
+      └── pages/               
+          └── Login.tsx          # Página de inicio de sesión
+```
+
+1. **Definición de Modelos**:
+   ```typescript
+   // domain/entities/User.ts
+   export enum UserRole {
+     ADMIN = 'admin',
+     MANAGER = 'manager',
+     USER = 'user'
+   }
+   
+   export interface User {
+     id: string;
+     email: string;
+     roles: UserRole[];
+     permissions: string[];
+   }
+   
+   // domain/value-objects/Permission.ts
+   export class Permission {
+     constructor(
+       public readonly resource: string,
+       public readonly action: 'read' | 'write' | 'delete' | 'admin'
+     ) {}
+     
+     static fromString(permissionString: string): Permission {
+       const [resource, action] = permissionString.split(':');
+       return new Permission(
+         resource, 
+         action as 'read' | 'write' | 'delete' | 'admin'
+       );
+     }
+     
+     toString(): string {
+       return `${this.resource}:${this.action}`;
+     }
+     
+     // Métodos puros para comparación
+     isReadPermission(): boolean {
+       return this.action === 'read';
+     }
+     
+     matches(other: Permission): boolean {
+       return this.resource === other.resource && 
+              (this.action === other.action || this.action === 'admin');
+     }
+   }
+   ```
+
+2. **Hooks de Autenticación Funcionales**:
+   ```typescript
+   // application/hooks/useAuth.ts
+   import { useState, useEffect, useCallback } from 'react';
+   import { User } from '../../domain/entities/User';
+   import { tokenService } from '../services/TokenService';
+   
+   export const useAuth = () => {
+     const [user, setUser] = useState<User | null>(null);
+     const [loading, setLoading] = useState(true);
+     
+     // Cargar usuario inicial
+     useEffect(() => {
+       const initAuth = async () => {
+         try {
+           // Obtener token de Cloudflare Access
+           const token = await tokenService.getToken();
+           if (token) {
+             const userData = tokenService.parseToken(token);
+             setUser(userData);
+           }
+         } finally {
+           setLoading(false);
+         }
+       };
+       
+       initAuth();
+     }, []);
+     
+     // Verificar si el usuario tiene un rol específico
+     const hasRole = useCallback((role: UserRole): boolean => {
+       return user?.roles.includes(role) || false;
+     }, [user]);
+     
+     // Verificar si el usuario tiene un permiso específico
+     const hasPermission = useCallback((permissionString: string): boolean => {
+       if (!user) return false;
+       
+       const requestedPermission = Permission.fromString(permissionString);
+       
+       return user.permissions.some(p => {
+         const userPermission = Permission.fromString(p);
+         return userPermission.matches(requestedPermission);
+       });
+     }, [user]);
+     
+     return {
+       user,
+       loading,
+       hasRole,
+       hasPermission,
+       isAuthenticated: !!user
+     };
+   };
+   ```
+
+3. **Componente de Ruta Protegida**:
+   ```tsx
+   // presentation/components/ProtectedRoute.tsx
+   import { Navigate, Outlet } from 'react-router-dom';
+   import { useAuth } from '../../application/hooks/useAuth';
+   
+   interface ProtectedRouteProps {
+     requiredPermission?: string;
+     requiredRole?: UserRole;
+   }
+   
+   export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
+     requiredPermission,
+     requiredRole
+   }) => {
+     const { user, loading, hasPermission, hasRole } = useAuth();
+     
+     if (loading) {
+       return <LoadingScreen />;
+     }
+     
+     if (!user) {
+       return <Navigate to="/login" replace />;
+     }
+     
+     if (requiredRole && !hasRole(requiredRole)) {
+       return <Navigate to="/unauthorized" replace />;
+     }
+     
+     if (requiredPermission && !hasPermission(requiredPermission)) {
+       return <Navigate to="/unauthorized" replace />;
+     }
+     
+     return <Outlet />;
+   };
+   ```
+
+### 2. Integración con Feature Flags
+
+El sistema de seguridad se integra con el mecanismo existente de Feature Flags, permitiendo controlar acceso basado en roles:
+
+```typescript
+// core/router/FeatureProtectedRoute.tsx
+import { Navigate, Outlet } from 'react-router-dom';
+import { useModuleFeatures } from '@/hooks/useModuleFeatures';
+import { useAuth } from '@/features/auth/application/hooks/useAuth';
+import { FeatureFlags } from '@/core/types';
+
+interface FeatureProtectedRouteProps {
+  featureFlag: FeatureFlags;
+  requiredRole?: UserRole;
+}
+
+export const FeatureProtectedRoute: React.FC<FeatureProtectedRouteProps> = ({
+  featureFlag,
+  requiredRole
+}) => {
+  const { features } = useModuleFeatures();
+  const { hasRole, isAuthenticated } = useAuth();
+  
+  // Verificar autenticación
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Verificar rol si se requiere
+  if (requiredRole && !hasRole(requiredRole)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  
+  // Verificar feature flag
+  if (!features.has(featureFlag)) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+  
+  return <Outlet />;
+};
+```
+
+### 3. Implementación Backend en Cloudflare Workers
+
+En el backend, el sistema de seguridad se implementa como middleware:
+
+```typescript
+// workers-api/src/index.ts
+import { authMiddleware } from './middleware/authMiddleware';
+import { corsMiddleware } from './middleware/corsMiddleware';
+import { handleInvestmentOrders } from './handlers/investmentOrders';
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Middleware CORS para preflight
+    const corsResponse = corsMiddleware(request);
+    if (corsResponse) return corsResponse;
+    
+    // Middleware de autenticación
+    const authResponse = await authMiddleware(request, env);
+    if (authResponse) return authResponse;
+    
+    // Obtener ruta solicitada
+    const url = new URL(request.url);
+    const path = url.pathname;
+    
+    // Rutas protegidas
+    if (path.startsWith('/api/investment-orders')) {
+      return handleInvestmentOrders(request, env, request.user);
+    }
+    
+    // Ruta no encontrada
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Endpoint no encontrado'
+    }), {
+      status: 404,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders
+      }
+    });
+  }
+};
+```
+
+### 4. Almacenamiento Seguro de Sesión
+
+Para almacenar credenciales, se utiliza una implementación funcional y segura:
+
+```typescript
+// application/services/SessionStorage.ts
+import { z } from 'zod';
+
+// Esquema para validar datos
+const SessionSchema = z.object({
+  token: z.string(),
+  expiresAt: z.number()
+});
+
+type Session = z.infer<typeof SessionSchema>;
+
+export const SessionStorage = {
+  // Guardar sesión de forma segura
+  save: (token: string, expiresIn: number): void => {
+    const expiresAt = Date.now() + expiresIn * 1000;
+    const session: Session = { token, expiresAt };
+    
+    // Almacenar en localStorage de forma segura
+    try {
+      localStorage.setItem('session', JSON.stringify(session));
+    } catch (error) {
+      console.error('Error saving session:', error);
+    }
+  },
+  
+  // Obtener sesión con validación
+  get: (): Session | null => {
+    try {
+      const data = localStorage.getItem('session');
+      if (!data) return null;
+      
+      const parsed = JSON.parse(data);
+      const result = SessionSchema.safeParse(parsed);
+      
+      if (!result.success) {
+        // Datos inválidos, eliminar sesión
+        SessionStorage.clear();
+        return null;
+      }
+      
+      // Verificar expiración
+      if (result.data.expiresAt < Date.now()) {
+        SessionStorage.clear();
+        return null;
+      }
+      
+      return result.data;
+    } catch {
+      SessionStorage.clear();
+      return null;
+    }
+  },
+  
+  // Eliminar sesión
+  clear: (): void => {
+    localStorage.removeItem('session');
+  }
+};
+```
+
+### 5. Guía de Implementación
+
+#### 5.1 Integración con Cloudflare Access
+
+1. **Crear aplicación en Cloudflare Zero Trust**:
+   - Acceder a [Cloudflare Zero Trust Dashboard](https://dash.teams.cloudflare.com/)
+   - Crear aplicación de tipo "Self-hosted"
+   - Configurar dominio: `reacttemplate.pages.dev`
+   - Establecer políticas de acceso (por dominio, email, etc.)
+
+2. **Obtener información de configuración**:
+   - Team Domain (AUD): `https://[your-team-name].cloudflareaccess.com`
+   - Auth Domain: `https://[your-team-name].cloudflareaccess.com`
+
+3. **Variables de Entorno para Workers**:
+   ```
+   # Para Cloudflare Workers
+   CF_TEAM_DOMAIN=https://[your-team-name].cloudflareaccess.com
+   CF_CLIENT_ID=[client-id-from-dashboard]
+   CF_CLIENT_SECRET=[client-secret-from-dashboard]
+   ```
+
+#### 5.2 Implementación de Autenticación en Frontend
+
+1. **Instalar dependencias**:
+   ```bash
+   npm install jose react-router-dom@latest zod
+   ```
+
+2. **Crear Feature de Autenticación**:
+   ```bash
+   npm run generate feature -- --name auth
+   ```
+
+3. **Generar componentes de auth**:
+   ```bash
+   npm run generate component -- --name ProtectedRoute --path src/features/auth/presentation/components
+   ```
+
+4. **Actualizar rutas para usar protección**:
+   ```tsx
+   // src/core/router/routes.tsx
+   import { ProtectedRoute } from '@/features/auth/presentation/components/ProtectedRoute';
+   
+   export const routes = [
+     {
+       path: '/',
+       element: <PublicLayout />,
+       children: [
+         { path: '/', element: <HomePage /> },
+         { path: '/login', element: <LoginPage /> },
+       ],
+     },
+     {
+       path: '/app',
+       element: <ProtectedRoute />,
+       children: [
+         {
+           path: '',
+           element: <AppLayout />,
+           children: [
+             { path: 'dashboard', element: <Dashboard /> },
+             { 
+               path: 'investment-orders', 
+               element: <ProtectedRoute requiredPermission="investment-orders:read" />,
+               children: [
+                 { path: '', element: <InvestmentOrderList /> },
+                 { path: ':id', element: <InvestmentOrderDetail /> },
+               ] 
+             },
+             // Más rutas protegidas...
+           ],
+         },
+       ],
+     },
+   ];
+   ```
+
+#### 5.3 Integración de JWT en Workers API
+
+1. **Instalar dependencias en Workers**:
+   ```bash
+   cd workers-api
+   npm install @tsndr/cloudflare-worker-jwt
+   ```
+
+2. **Implementar middleware de autenticación**:
+   ```bash
+   mkdir -p workers-api/src/middleware
+   touch workers-api/src/middleware/authMiddleware.ts
+   ```
+
+3. **Integrar verificación en API**:
+   ```typescript
+   // Modificar index.ts para usar el middleware de auth
+   import { authMiddleware } from './middleware/authMiddleware';
+   // resto del código...
+   ```
+
+#### 5.4 Integración con Feature Flags Existente
+
+1. **Extender el sistema para considerar roles**:
+   ```typescript
+   // hooks/useRoleBasedFeatures.ts
+   import { useModuleFeatures } from './useModuleFeatures';
+   import { useAuth } from '@/features/auth/application/hooks/useAuth';
+   import { UserRole } from '@/features/auth/domain/entities/User';
+   
+   // Mapa de features restringidas por rol
+   const ROLE_RESTRICTED_FEATURES = {
+     [FeatureFlags.ADMIN_MODULE]: [UserRole.ADMIN],
+     [FeatureFlags.INVESTMENT_ORDER]: [UserRole.ADMIN, UserRole.MANAGER],
+     // Otras restricciones...
+   };
+   
+   export const useRoleBasedFeatures = () => {
+     const { features, setFeature } = useModuleFeatures();
+     const { hasRole } = useAuth();
+     
+     // Filtrar features basado en roles
+     const accessibleFeatures = Object.entries(features).reduce(
+       (acc, [key, value]) => {
+         const featureKey = key as FeatureFlags;
+         const requiredRoles = ROLE_RESTRICTED_FEATURES[featureKey];
+         
+         // Si no hay restricción de rol, mantener el valor actual
+         if (!requiredRoles) {
+           acc[featureKey] = value;
+           return acc;
+         }
+         
+         // Si hay restricción, verificar si tiene alguno de los roles requeridos
+         acc[featureKey] = value && requiredRoles.some(role => hasRole(role));
+         return acc;
+       },
+       {} as Record<FeatureFlags, boolean>
+     );
+     
+     return {
+       features: accessibleFeatures,
+       setFeature
+     };
+   };
+   ```
+
+### 6. Consideraciones Adicionales
+
+1. **CORS y Seguridad**:
+   - Configurar CORS adecuadamente en Workers API
+   - Implementar protección contra CSRF
+   - Usar HTTPS para todas las comunicaciones
+
+2. **Rate Limiting**:
+   - Implementar limitación de solicitudes en Workers
+   - Prevenir ataques de fuerza bruta
+
+3. **Auditoría y Logging**:
+   - Registrar acciones críticas
+   - Implementar sistema de auditoría para cambios sensibles
+
+4. **Renovación de Tokens**:
+   - Estrategia para renovar tokens JWT vencidos
+   - Manejo de sesiones inactivas
+
+5. **Pruebas de Seguridad**:
+   - Implementar tests específicos para autorización
+   - Validar protecciones de rutas y endpoints
+
+La implementación sigue los mismos principios arquitectónicos del resto del proyecto: separación por features, programación funcional, y uso extensivo de interfaces para desacoplar implementaciones concretas de abstracciones.
